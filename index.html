@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Session Behavior Space</title>
+<style>
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:#000; overflow:hidden;
+    font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color:#fff;
+  }
+  canvas{ display:block; }
+
+  #ui{
+    position:fixed;
+    top:12px; left:12px;
+    z-index:10;
+    width:360px;
+    max-height: calc(100vh - 24px);
+    overflow:auto;
+    padding:12px 12px 10px;
+    border-radius:14px;
+    background:rgba(0,0,0,0.62);
+    border:1px solid rgba(255,255,255,0.15);
+    backdrop-filter: blur(6px);
+  }
+  #ui .title{ font-weight:800; font-size:14px; margin-bottom:2px; }
+  #ui .subtitle{ font-size:12px; opacity:.85; margin-bottom:10px; }
+
+  #ui .how{ margin-bottom:10px; }
+  #ui .howTitle{ font-weight:700; font-size:12px; margin-bottom:4px; opacity:.95; }
+  #ui .howText{ font-size:12px; line-height:1.35; opacity:.9; }
+
+  .sectionTitle{
+    font-weight:700; font-size:12px;
+    margin:10px 0 6px;
+    opacity:.95;
+  }
+  .legend{ display:flex; flex-direction:column; gap:6px; }
+  .legRow{ display:flex; align-items:center; gap:8px; font-size:12px; }
+  .swatch{
+    width:12px; height:12px; border-radius:4px;
+    border:1px solid rgba(255,255,255,0.18);
+    box-shadow:0 0 10px rgba(255,255,255,0.12);
+  }
+
+  .controls{ display:flex; flex-direction:column; gap:6px; font-size:12px; }
+  label{ display:flex; align-items:center; gap:8px; opacity:.95; }
+  input[type="checkbox"], input[type="radio"]{ transform: translateY(1px); }
+
+  .btnRow{ display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; }
+  button{
+    background:rgba(255,255,255,0.12);
+    border:1px solid rgba(255,255,255,0.22);
+    color:#fff;
+    padding:6px 10px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:12px;
+  }
+  button:hover{ background:rgba(255,255,255,0.18); }
+
+  .hint{ margin-top:8px; font-size:11px; opacity:.75; }
+
+  #counts{
+    margin-top:8px;
+    font-size:12px;
+    line-height:1.3;
+    padding:8px 10px;
+    border-radius:12px;
+    background:rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.14);
+  }
+  #counts .big{ font-weight:800; font-size:13px; }
+  #counts .muted{ opacity:.85; }
+
+  #selPanel{
+    margin-top:10px;
+    padding:10px 10px;
+    border-radius:12px;
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.12);
+    font-size:12px;
+  }
+  #selHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:8px;
+  }
+  #selHeader .label{
+    font-weight:800;
+    font-size:12px;
+  }
+  #selBody{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .kv{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .kv .k{ opacity:.8; }
+  .kv .v{ font-weight:700; text-align:right; }
+
+  .sep{
+    height:1px;
+    background:rgba(255,255,255,0.12);
+    margin:2px 0;
+  }
+
+  .list{
+    max-height:140px;
+    overflow:auto;
+    padding-right:6px;
+  }
+  .item{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    padding:4px 0;
+    border-bottom:1px dashed rgba(255,255,255,0.10);
+  }
+  .item:last-child{ border-bottom:none; }
+
+  .badge{
+    display:inline-block;
+    padding:2px 8px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,0.18);
+    background:rgba(255,255,255,0.08);
+    font-size:11px;
+    opacity:.95;
+    white-space:nowrap;
+  }
+
+  /* tooltip */
+  #tip{
+    position:fixed;
+    z-index:20;
+    pointer-events:none;
+    display:none;
+    max-width:360px;
+    padding:10px 12px;
+    border-radius:12px;
+    background:rgba(0,0,0,0.72);
+    border:1px solid rgba(255,255,255,0.18);
+    color:#fff;
+    font-size:12px;
+    line-height:1.35;
+    backdrop-filter: blur(6px);
+    box-shadow:0 8px 24px rgba(0,0,0,0.40);
+    transform: translate(12px, 12px);
+    white-space:nowrap;
+  }
+  #tip .id{ font-weight:800; margin-bottom:6px; }
+  #tip .row{ display:flex; gap:8px; }
+  #tip .k{ width:110px; opacity:.85; }
+  #tip .v{ font-weight:700; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div class="title">Session Behavior Space</div>
+  <div class="subtitle">Interpretability-first embedding + CLR/PCA baseline · with diagnostics</div>
+
+  <div class="how">
+    <div class="howTitle">How to read</div>
+    <div class="howText">
+      Each dot is a session (event-type composition). Switch <b>Layout</b> to compare an interpretable contrast-sphere
+      embedding vs a CLR+PCA baseline. Switch <b>Color</b> to see dominant type or scalar overlays (entropy/purity/length).
+      Click a point to inspect nearest neighbors and overlap diagnostics.
+    </div>
+  </div>
+
+  <div class="sectionTitle">Color legend (dominant type)</div>
+  <div class="legend">
+    <div class="legRow"><span class="swatch" style="background:hsl(209,75%,55%)"></span><span>Page view dominant</span></div>
+    <div class="legRow"><span class="swatch" style="background:hsl(119,75%,55%)"></span><span>Product view dominant</span></div>
+    <div class="legRow"><span class="swatch" style="background:hsl(29,75%,55%)"></span><span>Add to cart dominant</span></div>
+    <div class="legRow"><span class="swatch" style="background:hsl(0,75%,55%)"></span><span>Purchase dominant</span></div>
+  </div>
+
+  <div class="sectionTitle">Filter (dominant type)</div>
+  <div class="controls">
+    <label><input type="checkbox" id="f_page" checked> Page view</label>
+    <label><input type="checkbox" id="f_product" checked> Product view</label>
+    <label><input type="checkbox" id="f_cart" checked> Add to cart</label>
+    <label><input type="checkbox" id="f_purchase" checked> Purchase</label>
+
+    <div class="btnRow">
+      <button id="btn_all">All</button>
+      <button id="btn_none">None</button>
+    </div>
+  </div>
+
+  <div class="sectionTitle">Layout</div>
+  <div class="controls">
+    <label><input type="radio" name="layout" id="layout_contrast" checked> Contrast sphere</label>
+    <label><input type="radio" name="layout" id="layout_pca"> CLR + PCA baseline</label>
+  </div>
+
+  <div class="sectionTitle">Color</div>
+  <div class="controls">
+    <label><input type="radio" name="colormode" id="color_dom" checked> Dominant type</label>
+    <label><input type="radio" name="colormode" id="color_entropy"> Entropy (mixing)</label>
+    <label><input type="radio" name="colormode" id="color_purity"> Purity (max share)</label>
+    <label><input type="radio" name="colormode" id="color_len"> Session length (events)</label>
+
+    <div id="scalarLegend" style="display:none;margin-top:6px;">
+      <div style="font-size:11px;opacity:.85;margin-bottom:4px;">Low → High</div>
+      <div style="height:10px;border-radius:999px;border:1px solid rgba(255,255,255,0.18);
+                  background:linear-gradient(90deg, hsl(220,85%,55%), hsl(55,90%,55%), hsl(0,85%,55%));"></div>
+      <div id="scalarLegendNote" style="font-size:11px;opacity:.78;margin-top:6px;"></div>
+    </div>
+  </div>
+
+  <div class="hint">Tip: Drag to rotate • Scroll to zoom • Hover tooltip • Click to select</div>
+
+  <div id="counts">
+    <div class="big" id="visibleLine">Visible: — sessions</div>
+    <div class="muted" id="loadedLine">Loaded: — sessions</div>
+  </div>
+
+  <div id="selPanel">
+    <div id="selHeader">
+      <div class="label">Selection & Neighbors</div>
+      <button id="btn_clear" title="Clear selection">Clear</button>
+    </div>
+    <div id="selBody">
+      <div style="opacity:.8;">Click a point to inspect nearest neighbors (k=10) and overlap diagnostics.</div>
+    </div>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+/* ==================== SCENE ==================== */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 4000);
+camera.position.set(0, 0, 700);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:"high-performance" });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setClearColor(0x000000, 1);
+document.body.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 280;
+controls.maxDistance = 1600;
+
+const fmt = new Intl.NumberFormat();
+
+/* ==================== MATERIAL ==================== */
+function makeMaterial(size, opacity){
+  return new THREE.ShaderMaterial({
+    transparent:true,
+    depthWrite:false,
+    blending:THREE.AdditiveBlending,
+    uniforms:{ uSize:{value:size}, uOpacity:{value:opacity} },
+    vertexShader:`
+      uniform float uSize;
+      attribute vec3 color;
+      varying vec3 vColor;
+      varying float vDepth;
+      void main(){
+        vColor = color;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vDepth = -mv.z;
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = uSize * (320.0 / vDepth);
+      }
+    `,
+    fragmentShader:`
+      uniform float uOpacity;
+      varying vec3 vColor;
+      void main(){
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+        float a = smoothstep(0.5, 0.0, d);
+        gl_FragColor = vec4(vColor, a * uOpacity);
+      }
+    `
+  });
+}
+
+/* ==================== HELPERS ==================== */
+async function loadJSON(path){
+  const r = await fetch(path);
+  if(!r.ok) throw new Error("Failed to fetch " + path + " (" + r.status + ")");
+  return await r.json();
+}
+function pct(x){ return (x*100).toFixed(1) + "%"; }
+
+function dominantKey(d){
+  if(d.dominant) return d.dominant;
+  const keys = ["page_view","product_view","add_to_cart","purchase"];
+  let best = keys[0];
+  for(const k of keys){
+    if((d[k] ?? 0) > (d[best] ?? 0)) best = k;
+  }
+  return best;
+}
+function behaviorColor(d){
+  const dom = dominantKey(d);
+  const hue = ({
+    page_view: 0.58,      // ~209°
+    product_view: 0.33,   // ~119°
+    add_to_cart: 0.08,    // ~29°
+    purchase: 0.00        // ~0°
+  })[dom] ?? 0.58;
+  return new THREE.Color().setHSL(hue, 0.75, 0.55);
+}
+function scalarColor(t){
+  // t in [0,1] -> blue (low) to yellow to red (high)
+  t = Math.max(0, Math.min(1, t));
+  let hue;
+  if(t < 0.6){
+    const u = t/0.6;
+    hue = 220 + (55-220)*u;
+  } else {
+    const u = (t-0.6)/0.4;
+    hue = 55 + (0-55)*u;
+  }
+  return new THREE.Color().setHSL(hue/360, 0.85, 0.55);
+}
+
+function getSessionLength(d){
+  return (d.n_core ?? d.n_events ?? 0);
+}
+function percentileSorted(arrSorted, p){
+  if(!arrSorted.length) return 0;
+  const idx = Math.floor(p * (arrSorted.length - 1));
+  return arrSorted[Math.max(0, Math.min(arrSorted.length - 1, idx))];
+}
+
+let lenP95 = 1;
+let lenP05 = 0;
+function lengthTo01(d){
+  const x = getSessionLength(d);
+  const denom = Math.max(1e-9, (lenP95 - lenP05));
+  return Math.max(0, Math.min(1, (x - lenP05) / denom));
+}
+
+function getLayoutPos(d){
+  const wantPCA = document.getElementById("layout_pca")?.checked;
+  if(wantPCA){
+    if(d.x_pca != null && d.y_pca != null && d.z_pca != null) return [d.x_pca, d.y_pca, d.z_pca];
+    return [0,0,0];
+  }
+  if(d.x_contrast != null && d.y_contrast != null && d.z_contrast != null) return [d.x_contrast, d.y_contrast, d.z_contrast];
+  return [0,0,0];
+}
+
+function getColor(d){
+  if(document.getElementById("color_entropy")?.checked) return scalarColor(d.entropy ?? 0);
+  if(document.getElementById("color_purity")?.checked)  return scalarColor(d.purity ?? 0);
+  if(document.getElementById("color_len")?.checked)     return scalarColor(lengthTo01(d));
+  return behaviorColor(d);
+}
+
+/* ==================== STATS HELPERS ==================== */
+function mean(arr){
+  return arr.reduce((a,b)=>a+b,0) / Math.max(1, arr.length);
+}
+
+function pearsonCorr(a, b){
+  const n = Math.min(a.length, b.length);
+  if(n < 2) return 0;
+  let ma = 0, mb = 0;
+  for(let i=0;i<n;i++){ ma += a[i]; mb += b[i]; }
+  ma /= n; mb /= n;
+
+  let va = 0, vb = 0, cov = 0;
+  for(let i=0;i<n;i++){
+    const da = a[i] - ma;
+    const db = b[i] - mb;
+    cov += da * db;
+    va += da * da;
+    vb += db * db;
+  }
+  const denom = Math.sqrt(va * vb);
+  return denom > 1e-12 ? (cov / denom) : 0;
+}
+
+function rankArray(values){
+  // Average ranks for ties (rare for distances), stable enough for floats.
+  const n = values.length;
+  const items = new Array(n);
+  for(let i=0;i<n;i++) items[i] = {v: values[i], i};
+  items.sort((a,b)=>a.v-b.v);
+
+  const ranks = new Array(n);
+  const EPS = 1e-12;
+
+  let k = 0;
+  while(k < n){
+    let j = k;
+    while(j+1 < n && Math.abs(items[j+1].v - items[k].v) <= EPS) j++;
+
+    // ranks are 1..n; average ties
+    const avgRank = (k + j) / 2 + 1;
+    for(let t=k; t<=j; t++){
+      ranks[items[t].i] = avgRank;
+    }
+    k = j + 1;
+  }
+  return ranks;
+}
+
+function spearmanCorr(a, b){
+  const n = Math.min(a.length, b.length);
+  if(n < 2) return 0;
+  const ra = rankArray(a.slice(0, n));
+  const rb = rankArray(b.slice(0, n));
+  return pearsonCorr(ra, rb);
+}
+
+function pairwiseDistances(indices, layoutArr){
+  const out = [];
+  for(let i=0;i<indices.length;i++){
+    const a = indices[i];
+    const ax = layoutArr[a*3], ay = layoutArr[a*3+1], az = layoutArr[a*3+2];
+    for(let j=i+1;j<indices.length;j++){
+      const b = indices[j];
+      const dx = layoutArr[b*3]   - ax;
+      const dy = layoutArr[b*3+1] - ay;
+      const dz = layoutArr[b*3+2] - az;
+      out.push(Math.sqrt(dx*dx + dy*dy + dz*dz));
+    }
+  }
+  return out;
+}
+
+function pairwiseAngleCosinesFromCenter(indices, layoutArr, centerIdx){
+  // For each neighbor i: v_i = p_i - p_center, normalized.
+  // Return pairwise cosines cos(v_i, v_j) for i<j.
+  const cx = layoutArr[centerIdx*3], cy = layoutArr[centerIdx*3+1], cz = layoutArr[centerIdx*3+2];
+
+  const vecs = [];
+  for(const id of indices){
+    const x = layoutArr[id*3]   - cx;
+    const y = layoutArr[id*3+1] - cy;
+    const z = layoutArr[id*3+2] - cz;
+    const n = Math.sqrt(x*x + y*y + z*z) || 1e-12;
+    vecs.push([x/n, y/n, z/n]);
+  }
+
+  const out = [];
+  for(let i=0;i<vecs.length;i++){
+    const a = vecs[i];
+    for(let j=i+1;j<vecs.length;j++){
+      const b = vecs[j];
+      out.push(a[0]*b[0] + a[1]*b[1] + a[2]*b[2]); // cosine in [-1,1]
+    }
+  }
+  return out;
+}
+
+function meanAbsAngleDiffDeg(cosA, cosB){
+  const n = Math.min(cosA.length, cosB.length);
+  if(n < 1) return 0;
+  let s = 0;
+  for(let i=0;i<n;i++){
+    const a = Math.max(-1, Math.min(1, cosA[i]));
+    const b = Math.max(-1, Math.min(1, cosB[i]));
+    const angA = Math.acos(a);
+    const angB = Math.acos(b);
+    s += Math.abs(angA - angB);
+  }
+  return (s / n) * (180 / Math.PI);
+}
+
+/* ==================== GLOBALS ==================== */
+let geo, pts, data = [], domKeys = [];
+let originalPos = null;
+let posContrast = null;
+let posPCA = null;
+let visibleMask = null;
+let selectedIdx = null;
+
+const visibleLine = document.getElementById("visibleLine");
+const loadedLine = document.getElementById("loadedLine");
+function setCounts(loaded, visible){
+  loadedLine.textContent = `Loaded: ${fmt.format(loaded)} sessions`;
+  visibleLine.textContent = `Visible: ${fmt.format(visible)} sessions`;
+}
+
+/* ==================== FILTERS ==================== */
+function applyFilters(){
+  if(!geo || !originalPos) return;
+
+  const show = {
+    page_view: document.getElementById("f_page").checked,
+    product_view: document.getElementById("f_product").checked,
+    add_to_cart: document.getElementById("f_cart").checked,
+    purchase: document.getElementById("f_purchase").checked
+  };
+
+  const pos = geo.attributes.position.array;
+  let visible = 0;
+
+  if(!visibleMask || visibleMask.length !== data.length){
+    visibleMask = new Array(data.length).fill(true);
+  }
+
+  for(let i=0;i<data.length;i++){
+    const keep = !!show[domKeys[i]];
+    visibleMask[i] = keep;
+    const base = i*3;
+
+    if(keep){
+      pos[base]   = originalPos[base];
+      pos[base+1] = originalPos[base+1];
+      pos[base+2] = originalPos[base+2];
+      visible++;
+    } else {
+      pos[base]   = 999999;
+      pos[base+1] = 999999;
+      pos[base+2] = 999999;
+    }
+  }
+
+  geo.attributes.position.needsUpdate = true;
+  setCounts(data.length, visible);
+
+  if(selectedIdx != null){
+    updateSelectionPanel(selectedIdx);
+  }
+}
+
+/* ==================== REBUILD COLORS/LAYOUT ==================== */
+function rebuildColors(){
+  if(!geo) return;
+  const col = geo.attributes.color.array;
+
+  for(let i=0;i<data.length;i++){
+    const c = getColor(data[i]);
+    const base = i*3;
+    col[base]   = c.r;
+    col[base+1] = c.g;
+    col[base+2] = c.b;
+  }
+  geo.attributes.color.needsUpdate = true;
+
+  const scalarLegend = document.getElementById("scalarLegend");
+  const scalarLegendNote = document.getElementById("scalarLegendNote");
+  const showScalar =
+    document.getElementById("color_entropy")?.checked ||
+    document.getElementById("color_purity")?.checked ||
+    document.getElementById("color_len")?.checked;
+
+  if(scalarLegend) scalarLegend.style.display = showScalar ? "block" : "none";
+
+  if(scalarLegendNote){
+    if(document.getElementById("color_entropy")?.checked){
+      scalarLegendNote.textContent = "Entropy normalized to [0,1] (higher = more mixed).";
+    } else if(document.getElementById("color_purity")?.checked){
+      scalarLegendNote.textContent = "Purity in [0,1] (higher = more dominated by one event type).";
+    } else if(document.getElementById("color_len")?.checked){
+      scalarLegendNote.textContent = `Length scaled by robust percentiles (p05=${lenP05.toFixed(0)}, p95=${lenP95.toFixed(0)}).`;
+    } else {
+      scalarLegendNote.textContent = "";
+    }
+  }
+}
+
+function rebuildLayout(){
+  if(!geo || !posContrast || !posPCA) return;
+
+  const src = document.getElementById("layout_pca")?.checked ? posPCA : posContrast;
+  const arr = geo.attributes.position.array;
+
+  for(let i=0;i<data.length;i++){
+    const base=i*3;
+    arr[base]   = src[base];
+    arr[base+1] = src[base+1];
+    arr[base+2] = src[base+2];
+  }
+
+  geo.attributes.position.needsUpdate = true;
+  originalPos = new Float32Array(arr);
+
+  applyFilters();
+
+  if(selectedIdx != null){
+    updateSelectionPanel(selectedIdx);
+  }
+}
+
+/* ==================== TOOLTIP (HOVER) ==================== */
+const tip = document.getElementById("tip");
+const raycaster = new THREE.Raycaster();
+raycaster.params.Points.threshold = 12; // easier to hit
+const mouseNDC = new THREE.Vector2();
+
+function showTip(clientX, clientY, d){
+  tip.style.left = clientX + "px";
+  tip.style.top  = clientY + "px";
+  tip.style.display = "block";
+
+  tip.innerHTML = `
+    <div class="id">${d.id ?? "(no id)"}</div>
+    <div class="row"><div class="k">dominant</div><div class="v">${dominantKey(d)}</div></div>
+    <div class="row"><div class="k">n_core</div><div class="v">${getSessionLength(d)}</div></div>
+    <div class="sep"></div>
+    <div class="row"><div class="k">page_view</div><div class="v">${pct(d.page_view ?? 0)}</div></div>
+    <div class="row"><div class="k">product_view</div><div class="v">${pct(d.product_view ?? 0)}</div></div>
+    <div class="row"><div class="k">add_to_cart</div><div class="v">${pct(d.add_to_cart ?? 0)}</div></div>
+    <div class="row"><div class="k">purchase</div><div class="v">${pct(d.purchase ?? 0)}</div></div>
+    <div class="sep"></div>
+    <div class="row"><div class="k">entropy</div><div class="v">${(d.entropy ?? 0).toFixed(3)}</div></div>
+    <div class="row"><div class="k">purity</div><div class="v">${(d.purity ?? 0).toFixed(3)}</div></div>
+  `;
+}
+
+function hideTip(){ tip.style.display = "none"; }
+
+function onPointerMove(e){
+  if(!pts || !geo) return;
+
+  mouseNDC.x = (e.clientX / innerWidth) * 2 - 1;
+  mouseNDC.y = -(e.clientY / innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouseNDC, camera);
+  const hits = raycaster.intersectObject(pts, false);
+
+  if(hits && hits.length){
+    const idx = hits[0].index;
+    const d = data[idx];
+    if(d){
+      showTip(e.clientX, e.clientY, d);
+      return;
+    }
+  }
+  hideTip();
+}
+addEventListener("pointermove", onPointerMove);
+addEventListener("pointerleave", hideTip);
+addEventListener("blur", hideTip);
+
+/* ==================== KNN (O(n) per click) ==================== */
+function getCurrentLayoutArray(){
+  return document.getElementById("layout_pca")?.checked ? posPCA : posContrast;
+}
+function getOtherLayoutArray(){
+  return document.getElementById("layout_pca")?.checked ? posContrast : posPCA;
+}
+function layoutNameCurrent(){
+  return document.getElementById("layout_pca")?.checked ? "CLR+PCA" : "Contrast sphere";
+}
+function layoutNameOther(){
+  return document.getElementById("layout_pca")?.checked ? "Contrast sphere" : "CLR+PCA";
+}
+
+function knnIndices(idx, layoutArr, k){
+  const bx = layoutArr[idx*3], by = layoutArr[idx*3+1], bz = layoutArr[idx*3+2];
+  const best = [];
+
+  function worstIndex(){
+    let wi = 0;
+    for(let i=1;i<best.length;i++){
+      if(best[i][0] > best[wi][0]) wi = i;
+    }
+    return wi;
+  }
+
+  for(let j=0;j<data.length;j++){
+    if(j === idx) continue;
+    if(visibleMask && !visibleMask[j]) continue;
+
+    const dx = layoutArr[j*3]   - bx;
+    const dy = layoutArr[j*3+1] - by;
+    const dz = layoutArr[j*3+2] - bz;
+    const d2 = dx*dx + dy*dy + dz*dz;
+
+    if(best.length < k){
+      best.push([d2, j]);
+    } else {
+      const wi = worstIndex();
+      if(d2 < best[wi][0]){
+        best[wi] = [d2, j];
+      }
+    }
+  }
+
+  best.sort((a,b)=>a[0]-b[0]);
+  return best;
+}
+
+/* ==================== SELECTION PANEL ==================== */
+const selBody = document.getElementById("selBody");
+document.getElementById("btn_clear").addEventListener("click", ()=>{
+  selectedIdx = null;
+  selBody.innerHTML = `<div style="opacity:.8;">Click a point to inspect nearest neighbors (k=10) and overlap diagnostics.</div>`;
+});
+
+function updateSelectionPanel(idx){
+  if(idx == null || !data[idx]) return;
+  selectedIdx = idx;
+
+  const d0 = data[idx];
+  const K = 10;
+  const M = 50;
+
+  const curArr = getCurrentLayoutArray();
+  const othArr = getOtherLayoutArray();
+
+  const nnCur = knnIndices(idx, curArr, K);
+  const nnOth = knnIndices(idx, othArr, K);
+
+  const nnCur50 = knnIndices(idx, curArr, M);
+  const nnOth50 = knnIndices(idx, othArr, M);
+
+  const setCur10 = new Set(nnCur.map(x => x[1]));
+  const setOth10 = new Set(nnOth.map(x => x[1]));
+  const setCur50 = new Set(nnCur50.map(x => x[1]));
+  const setOth50 = new Set(nnOth50.map(x => x[1]));
+
+  let inter10 = 0;
+  for(const j of setCur10) if(setOth10.has(j)) inter10++;
+  const overlap10 = inter10 / K;
+
+  let curInOth50 = 0;
+  for(const j of setCur10) if(setOth50.has(j)) curInOth50++;
+  let othInCur50 = 0;
+  for(const j of setOth10) if(setCur50.has(j)) othInCur50++;
+
+  const recallCurInOth50 = curInOth50 / K;
+  const recallOthInCur50 = othInCur50 / K;
+
+  const meanDistCur10 = mean(nnCur.map(x => Math.sqrt(x[0])));
+  const meanDistOth10 = mean(nnOth.map(x => Math.sqrt(x[0])));
+
+  // Local distance agreement: Spearman on pairwise distances
+  const union = Array.from(new Set([idx, ...nnCur.map(x=>x[1]), ...nnOth.map(x=>x[1])]));
+  const dCur = pairwiseDistances(union, curArr);
+  const dOth = pairwiseDistances(union, othArr);
+  const localDistRankCorr = spearmanCorr(dCur, dOth);
+
+  // Directional diagnostic: Spearman on pairwise angle cosines (around the selected point)
+  const neighUnion = Array.from(new Set([...nnCur.map(x=>x[1]), ...nnOth.map(x=>x[1])]));
+  const cosCur = pairwiseAngleCosinesFromCenter(neighUnion, curArr, idx);
+  const cosOth = pairwiseAngleCosinesFromCenter(neighUnion, othArr, idx);
+  const localAngleRankCorr = spearmanCorr(cosCur, cosOth);
+  const meanAbsAngDiffDeg = meanAbsAngleDiffDeg(cosCur, cosOth);
+
+  // neighborhood summary (current)
+  const neighIdx = nnCur.map(x => x[1]);
+  const comps = neighIdx.map(i => data[i]);
+
+  const mpv  = mean(comps.map(o=>o.page_view ?? 0));
+  const mpr  = mean(comps.map(o=>o.product_view ?? 0));
+  const mac  = mean(comps.map(o=>o.add_to_cart ?? 0));
+  const mpu  = mean(comps.map(o=>o.purchase ?? 0));
+  const ment = mean(comps.map(o=>o.entropy ?? 0));
+  const mpur = mean(comps.map(o=>o.purity ?? 0));
+  const mlen = mean(comps.map(o=>getSessionLength(o)));
+
+  // optional outcomes
+  const hasOutcomes = ("converted" in d0) || ("revenue" in d0);
+  let convRate = null, meanRev = null;
+  if(hasOutcomes){
+    convRate = mean(comps.map(o => (o.converted ?? 0)));
+    meanRev = mean(comps.map(o => (o.revenue ?? 0)));
+  }
+
+  function domBadge(o){
+    return `<span class="badge">${dominantKey(o)}</span>`;
+  }
+
+  function listHTML(nn){
+    return `
+      <div class="list">
+        ${nn.map((x, r)=>{
+          const j = x[1];
+          const dist = Math.sqrt(x[0]);
+          const o = data[j];
+          const out = (hasOutcomes
+            ? ` · conv ${((o.converted??0)*100).toFixed(0)}% · rev ${(o.revenue??0).toFixed(2)}`
+            : ``);
+          return `
+            <div class="item">
+              <div style="min-width:0; overflow:hidden; text-overflow:ellipsis;">
+                <span style="opacity:.75;">#${r+1}</span>
+                <span style="font-weight:800;"> ${o.id ?? j}</span>
+                <span style="opacity:.8;"> ${out}</span>
+              </div>
+              <div style="text-align:right; white-space:nowrap;">
+                ${domBadge(o)} <span style="opacity:.75;">${dist.toFixed(2)}</span>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  const selectedOutcomes = hasOutcomes ? `
+    <div class="kv"><div class="k">converted</div><div class="v">${((d0.converted ?? 0)*100).toFixed(0)}%</div></div>
+    <div class="kv"><div class="k">revenue</div><div class="v">${(d0.revenue ?? 0).toFixed(2)}</div></div>
+  ` : ``;
+
+  selBody.innerHTML = `
+    <div>
+      <div style="font-weight:900; font-size:12px; margin-bottom:6px;">Selected</div>
+      <div class="kv"><div class="k">id</div><div class="v">${d0.id ?? "(no id)"}</div></div>
+      <div class="kv"><div class="k">dominant</div><div class="v">${dominantKey(d0)}</div></div>
+      <div class="kv"><div class="k">entropy</div><div class="v">${(d0.entropy ?? 0).toFixed(3)}</div></div>
+      <div class="kv"><div class="k">purity</div><div class="v">${(d0.purity ?? 0).toFixed(3)}</div></div>
+      <div class="kv"><div class="k">n_core</div><div class="v">${getSessionLength(d0)}</div></div>
+      ${selectedOutcomes}
+      <div class="sep"></div>
+      <div class="kv"><div class="k">page_view</div><div class="v">${pct(d0.page_view ?? 0)}</div></div>
+      <div class="kv"><div class="k">product_view</div><div class="v">${pct(d0.product_view ?? 0)}</div></div>
+      <div class="kv"><div class="k">add_to_cart</div><div class="v">${pct(d0.add_to_cart ?? 0)}</div></div>
+      <div class="kv"><div class="k">purchase</div><div class="v">${pct(d0.purchase ?? 0)}</div></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div>
+      <div style="font-weight:900; font-size:12px; margin-bottom:6px;">Neighborhood summary (current: ${layoutNameCurrent()})</div>
+      <div class="kv"><div class="k">mean page_view</div><div class="v">${pct(mpv)}</div></div>
+      <div class="kv"><div class="k">mean product_view</div><div class="v">${pct(mpr)}</div></div>
+      <div class="kv"><div class="k">mean add_to_cart</div><div class="v">${pct(mac)}</div></div>
+      <div class="kv"><div class="k">mean purchase</div><div class="v">${pct(mpu)}</div></div>
+      <div class="kv"><div class="k">mean entropy</div><div class="v">${ment.toFixed(3)}</div></div>
+      <div class="kv"><div class="k">mean purity</div><div class="v">${mpur.toFixed(3)}</div></div>
+      <div class="kv"><div class="k">mean n_core</div><div class="v">${mlen.toFixed(2)}</div></div>
+      ${hasOutcomes ? `
+        <div class="kv"><div class="k">conv rate</div><div class="v">${(convRate*100).toFixed(1)}%</div></div>
+        <div class="kv"><div class="k">mean revenue</div><div class="v">${meanRev.toFixed(2)}</div></div>
+      ` : ``}
+    </div>
+
+    <div class="sep"></div>
+
+    <div>
+      <div style="font-weight:900; font-size:12px; margin-bottom:6px;">Overlap diagnostics</div>
+      <div class="kv"><div class="k">overlap@10</div><div class="v">${(overlap10*100).toFixed(0)}%</div></div>
+      <div class="kv"><div class="k">recall@50 (cur→other)</div><div class="v">${(recallCurInOth50*100).toFixed(0)}%</div></div>
+      <div class="kv"><div class="k">recall@50 (other→cur)</div><div class="v">${(recallOthInCur50*100).toFixed(0)}%</div></div>
+      <div class="kv"><div class="k">mean nn dist (cur)</div><div class="v">${meanDistCur10.toFixed(2)}</div></div>
+      <div class="kv"><div class="k">mean nn dist (other)</div><div class="v">${meanDistOth10.toFixed(2)}</div></div>
+      <div class="sep"></div>
+      <div class="kv"><div class="k">local dist rank corr</div><div class="v">${localDistRankCorr.toFixed(2)}</div></div>
+      <div class="kv"><div class="k">local angle rank corr</div><div class="v">${localAngleRankCorr.toFixed(2)}</div></div>
+      <div class="kv"><div class="k">mean |Δ angle|</div><div class="v">${meanAbsAngDiffDeg.toFixed(1)}°</div></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div>
+      <div style="font-weight:900; font-size:12px; margin-bottom:6px;">
+        k=10 nearest neighbors (current: ${layoutNameCurrent()})
+      </div>
+      ${listHTML(nnCur)}
+    </div>
+
+    <div class="sep"></div>
+
+    <div>
+      <div style="font-weight:900; font-size:12px; margin-bottom:6px;">
+        k=10 nearest neighbors (other: ${layoutNameOther()})
+        <span style="opacity:.8; font-weight:700;">· overlap ${(overlap10*100).toFixed(0)}%</span>
+      </div>
+      ${listHTML(nnOth)}
+    </div>
+  `;
+}
+
+/* ==================== CLICK TO SELECT ==================== */
+function onPointerDown(e){
+  if(!pts || !geo) return;
+
+  mouseNDC.x = (e.clientX / innerWidth) * 2 - 1;
+  mouseNDC.y = -(e.clientY / innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouseNDC, camera);
+  const hits = raycaster.intersectObject(pts, false);
+
+  if(hits && hits.length){
+    const idx = hits[0].index;
+    if(visibleMask && !visibleMask[idx]) return;
+    updateSelectionPanel(idx);
+  }
+}
+addEventListener("pointerdown", onPointerDown);
+
+/* ==================== INIT ==================== */
+async function init(){
+  try{
+    setCounts(0,0);
+
+    // Recommended (includes n_core + converted/revenue):
+    const path = "data/processed/sessions_enriched_outcomes.json";
+    // Fallback:
+    // const path = "data/processed/sessions_enriched.json";
+
+    data = await loadJSON(path);
+
+    // robust scaling for length overlay
+    const lens = data.map(getSessionLength).sort((a,b)=>a-b);
+    lenP05 = percentileSorted(lens, 0.05);
+    lenP95 = percentileSorted(lens, 0.95);
+    if(!(lenP95 > lenP05)){
+      lenP05 = 0;
+      lenP95 = Math.max(1, lens[lens.length-1] || 1);
+    }
+
+    geo = new THREE.BufferGeometry();
+
+    posContrast = new Float32Array(data.length * 3);
+    posPCA      = new Float32Array(data.length * 3);
+
+    const pos = new Float32Array(data.length * 3);
+    const col = new Float32Array(data.length * 3);
+    domKeys = new Array(data.length);
+    visibleMask = new Array(data.length).fill(true);
+
+    data.forEach((d,i)=>{
+      domKeys[i] = dominantKey(d);
+      const b = i*3;
+
+      posContrast[b]   = (d.x_contrast ?? 0);
+      posContrast[b+1] = (d.y_contrast ?? 0);
+      posContrast[b+2] = (d.z_contrast ?? 0);
+
+      posPCA[b]        = (d.x_pca ?? 0);
+      posPCA[b+1]      = (d.y_pca ?? 0);
+      posPCA[b+2]      = (d.z_pca ?? 0);
+
+      const [x,y,z] = getLayoutPos(d);
+      pos.set([x,y,z], b);
+
+      const c = getColor(d);
+      col.set([c.r, c.g, c.b], b);
+    });
+
+    originalPos = pos.slice();
+
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+
+    pts = new THREE.Points(geo, makeMaterial(5.0, 1.0));
+    scene.add(pts);
+
+    // filter listeners
+    ["f_page","f_product","f_cart","f_purchase"].forEach(id=>{
+      document.getElementById(id).addEventListener("change", applyFilters);
+    });
+    document.getElementById("btn_all").addEventListener("click", ()=>{
+      ["f_page","f_product","f_cart","f_purchase"].forEach(id => document.getElementById(id).checked = true);
+      applyFilters();
+    });
+    document.getElementById("btn_none").addEventListener("click", ()=>{
+      ["f_page","f_product","f_cart","f_purchase"].forEach(id => document.getElementById(id).checked = false);
+      applyFilters();
+    });
+
+    // layout + color listeners
+    ["layout_contrast","layout_pca"].forEach(id=>{
+      document.getElementById(id).addEventListener("change", rebuildLayout);
+    });
+    ["color_dom","color_entropy","color_purity","color_len"].forEach(id=>{
+      document.getElementById(id).addEventListener("change", rebuildColors);
+    });
+
+    rebuildColors();
+    applyFilters();
+
+  } catch(err){
+    console.error(err);
+    loadedLine.textContent = "ERROR: " + err.message;
+  }
+}
+init();
+
+/* ==================== RENDER LOOP ==================== */
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener("resize", ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
